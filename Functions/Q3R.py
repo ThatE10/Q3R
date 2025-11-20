@@ -21,7 +21,7 @@ def preserve_grad_state():
     finally:
         torch.set_grad_enabled(was_grad_enabled)
 
-class QuaRS:
+class Q3R:
     def __init__(self, trainable_modules: Dict[nn.Linear, List[Tuple]], target_rank: int, lmbda: float, steps=5,
                  rectangular_mode=False, scaling=10 ** -3, verbose=False, epsilon_schedule="DEFAULT", N: int = 100000):
         # Distributed setup
@@ -111,7 +111,7 @@ class QuaRS:
                 "Please make sure to pass initialization the trainable_weights list "
                 "after the model has been to the appropriate device!")
 
-        print(f"QuaRS: Successfully organized {len(trainable_weights)} layers with target ranks: {self.target_ranks}")
+        print(f"Q3R: Successfully organized {len(trainable_weights)} layers with target ranks: {self.target_ranks}")
     
     def _get_my_regularizer_indices(self):
         """Distribute regularizers across ranks"""
@@ -123,7 +123,15 @@ class QuaRS:
     
     @staticmethod
     def extract_trainable_weights(trainable_modules: Dict[nn.Linear, List[Tuple]]):
-        """Args:
+        """
+        Extracts the specific weight tensors or slices to be regularized.
+
+        For standard modules, this returns the full `weight` tensor.
+        For fused modules (indicated by a list of tuples in `trainable_modules`), this returns
+        slices of the weight tensor. This allows Q3R to treat different parts of a fused layer
+        (like Query, Key, Value projections) as independent low-rank matrices.
+
+        Args:
             trainable_modules: Dict where keys are modules (e.g., nn.Linear) and values are:
                        - None: use full module.weight
                        - List of (start, end) tuples: use slices of module.weight
@@ -151,6 +159,20 @@ class QuaRS:
     def pad_tensor_with_slice_bounds(m_k: torch.Tensor, full_shape: tuple, dim: int, bounds: tuple) -> torch.Tensor:
         """
         Pads `m_k` into a tensor of shape `full_shape` along the specified dimension using flexible bounds.
+        
+        This function is crucial for handling fused weights (e.g., QKV in transformers). When a module represents
+        fused weights, we only want to apply the regularization gradient to a specific slice of the full weight matrix.
+        This function takes the gradient calculated for that slice (`m_k`) and places it into a zero-filled tensor
+        of the full weight's shape, effectively "stuffing" the gradient back into its correct position.
+
+        Args:
+            m_k (torch.Tensor): The gradient tensor for the specific slice/component.
+            full_shape (tuple): The shape of the full weight matrix of the module.
+            dim (int): The dimension along which to slice/pad (usually 0 for output features).
+            bounds (tuple): A tuple (start, end) defining the slice indices in the full tensor.
+        
+        Returns:
+            torch.Tensor: A tensor of `full_shape` with `m_k` inserted at the specified bounds and zeros elsewhere.
         """
         if bounds is None:
             return m_k
@@ -260,6 +282,10 @@ class QuaRS:
                                 truncated_dim
                             )
                         )
+                        # The pad_tensor_with_slice_bounds function handles the "stuffing" of the gradient
+                        # for a specific component (e.g., Query) back into the full gradient tensor for the
+                        # fused module (e.g., QKV layer). This ensures that the regularization update
+                        # is applied correctly to only the relevant part of the fused weight.
                     index += 1
                 
                 self.grad[module_reference.weight] = grad_buffer
@@ -350,7 +376,7 @@ class QuaRS:
             
     def state_dict(self):
         """
-        Returns the state of the QuaRS object as a dictionary.
+        Returns the state of the Q3R object as a dictionary.
         Useful for saving and loading the state of the regularization operator.
         """
         
@@ -377,7 +403,7 @@ class QuaRS:
         
     def load_state_dict(self, state_dict):
         """
-        Loads the state of the QuaRS object from a dictionary.
+        Loads the state of the Q3R object from a dictionary.
         Useful for restoring the state of the regularization operator.
         """
         self.target_ranks = state_dict['target_ranks']
@@ -459,7 +485,6 @@ class Wx:
             else:
                 U, sigma, Vh = torch.linalg.svd(weight_matrix, full_matrices=False)
                 V = Vh.T
-            # print(U.shape, sigma.shape, V.shape)
 
             # Update smoothing parameter epsilon
             if self.epsilon_schedule == 'linear':

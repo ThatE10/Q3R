@@ -10,10 +10,10 @@ from torch import tensor, nn
 from UnitTest.Old_QuaRS import QuaRS
 from UnitTest.Old_QuaRS import W_x as WxOld
 
-from Functions.Q3R import QuaRS as QuaRS_v2
-from Functions.Q3R import W_x_v2 as WxNew
+from Functions.Q3R import Q3R as QuaRS_v2
+from Functions.Q3R import Wx as WxNew
 
-from Functions.quars_v3 import wx as WxNewV2
+from Functions.Q3R import Wx as WxNewV2
 
 
 class Q3R_unittest(unittest.TestCase):

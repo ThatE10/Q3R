@@ -32,7 +32,7 @@ from Functions.AdamQ3R import AdamQ3R
 from Functions.Hoyer import Hoyer
 from Functions.LoRITa import LoRITaQKV, LoRITaLinear
 from Functions.ModuleModificationHandler import ModuleReplacementHandler
-from Functions.quars_v3 import QuaRS
+from Functions.Q3R import Q3R
 from models.DNN_model import SimpleDNN
 from Functions.timer import Timer
 from functools import lru_cache
@@ -83,7 +83,7 @@ def parse_args(args):
     parser.add_argument('--technique', type=str,
                         choices=['Hoyer', 'QuaRS', 'LoRA', 'LoRITa', 'AdamQ3R', 'LoRITaQuaRS', 'LoRITaAdamQ3R'],
                         default=None,
-                        help='Regularizer to use: Hoyer or QuaRS.')
+                        help='Regularizer to use: Hoyer or Q3R.')
 
     parser.add_argument('--step', type=int, default=5,
                         help='Step size for the Q3R update.')
@@ -96,7 +96,7 @@ def parse_args(args):
                         help='Loads AdamQ3R state from a given file')
     parser.add_argument('--load_regulariser_location', type=str,
                         default=None,
-                        help='Loads QuaRS regulariser from a given file')
+                        help='Loads Q3R regulariser from a given file')
     
     parser.add_argument('--start_epoch', type=int,
                         default=0,
@@ -109,9 +109,9 @@ def parse_args(args):
     parser.add_argument('--rectangular_mode', type=str2bool, default=False,
                         help='Impacts LoRA/Hoyer/Q3R intialization and application')
     parser.add_argument('--target_rank', type=float, default=None,
-                        help='Target rank for QuaRS regularizer/LoRA')
+                        help='Target rank for Q3R regularizer/LoRA')
     parser.add_argument('--lmbda', type=float, default=10 ** -2,
-                        help='lambda value for QuaRS regularize.')
+                        help='lambda value for Q3R regularize.')
     parser.add_argument('--depth_lorita', type=int, default=1,
                         help='Used in LoRITa as N')
     parser.add_argument('--weight_decay_alpha', type=float, default=10 ** -2,
@@ -144,7 +144,7 @@ def create_experiment_name(config):
         if config.technique == "LoRITa":
             experiment_name += f"-depth{config.depth_lorita}-{config.weight_decay_alpha}"
 
-        if config.technique == "LoRA" or config.technique == "QuaRS":
+        if config.technique == "LoRA" or config.technique == "Q3R":
             if config.target_rank:
                 experiment_name += f"_rank{config.target_rank}"
             if config.rectangular_mode:
@@ -475,7 +475,6 @@ def configure_model_experiment(model, config):
                 handler.simplify_lorita_module(name, module)
 
     modules_to_modify = extract_modules(model, config)
-    print("call me twice you're a fool")
     extracted_layers = extract_linear(model, config)
 
     print(modules_to_modify)
@@ -575,11 +574,11 @@ def configure_model_experiment(model, config):
     if config.technique == "LoRA":
 
                 """
-    elif config.technique == "QuaRS":
+    elif config.technique == "Q3R":
         if config.rectangular_mode:
             rectangular_mode = 1
 
-        regulariser = QuaRS(trainable_modules=extracted_layers, target_rank=config.target_rank, lmbda=1, verbose=True,
+        regulariser = Q3R(trainable_modules=extracted_layers, target_rank=config.target_rank, lmbda=1, verbose=True,
                             N=config.N,
                             epsilon_schedule=config.epsilon_schedule, steps=config.step)
 
@@ -606,9 +605,9 @@ def configure_model_experiment(model, config):
             print(module)
             extracted_weights.extend(module.get_layer_reference())  # get the linear layer references to pass into QuaRS
 
-        print(f"LoRITa QuaRS weights: {extracted_weights}")
+        print(f"LoRITa Q3R weights: {extracted_weights}")
 
-        regulariser = QuaRS(trainable_modules=extracted_weights, target_rank=config.target_rank, lmbda=1, verbose=True,
+        regulariser = Q3R(trainable_modules=extracted_weights, target_rank=config.target_rank, lmbda=1, verbose=True,
                             N=config.N,
                             epsilon_schedule=config.epsilon_schedule, steps=config.step)
 
@@ -673,7 +672,7 @@ def optim_parser(model, config):
             print(module)
             extracted_modules.extend(module.get_layer_reference())  # get the linear layer references to pass into QuaRS
 
-        print(f"LoRITa QuaRS weights: {extracted_modules}")
+        print(f"LoRITa Q3R weights: {extracted_modules}")
 
         optimizer = AdamQ3R(model.parameters(), trainable_weights=extracted_modules, target_rank=config.target_rank,
                             lr=config.learning_rate, lmbda=config.lmbda,

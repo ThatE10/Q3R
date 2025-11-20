@@ -16,77 +16,136 @@
 </p>
 </div>
 
-## Quick Start Guide
-There are two methodologies to employ Q3R during training via direct gradient application in AdamQ3R() or via autograd regularization.
+## Overview
 
-Example code snippet, hyperparameter recommendations and usage are below
+Q3R is a novel regularization technique for training low-rank neural networks. It promotes low-rank structures in weight matrices during training and can be applied to standard linear layers as well as fused layers (like QKV projections in Transformers).
+
+**Key Features:**
+- Rank regularization for weight matrices
+- Fused layer support (e.g., Q, K, V slices)
+- Distributed training (DDP) support
+- Integrated `AdamQ3R` optimizer
+
+## Quick Start
+
+Two ways to use Q3R:
+
+**Option 1: AdamQ3R (Recommended)**
 ```python
-model = Net()
+from Functions.AdamQ3R import AdamQ3R
+from main_helper import extract_linear
+
 trainable_modules = extract_linear(model, config)
-optimizer = AdamQ3R(model.parameters(),lr=0.00004,
-                    trainable_modules=trainable_modules, target_rank=0.2,
-                    lmbda=0.1, period=5
-                    )
+optimizer = AdamQ3R(model.parameters(), 
+                    trainable_modules=trainable_modules, 
+                    target_rank=0.2, 
+                    lmbda=0.1, 
+                    steps=5)
 ```
 
+**Option 2: Q3R Regularizer**
 ```python
+from Functions.Q3R import Q3R
 
 trainable_modules = extract_linear(model, config)
-q3r = Q3R(trainable_modules=trainable_modules, target_rank=0.2,
-          lmbda=0.1, period=5
-          )
+q3r = Q3R(trainable_modules=trainable_modules, 
+          target_rank=0.2, 
+          lmbda=0.1, 
+          steps=5)
 
-for data in train_loader:
-    inputs, labels = data[0].to(DEVICE), data[1].to(DEVICE)     
-    optimizer.zero_grad()
-
-    outputs = model(inputs)
-    loss = criterion(outputs, labels)
-
-    if q3r:
-        q3r.update()
-        total_loss = loss + rank_regularizer.val
-    else:
-        total_loss = loss
-
-    total_loss.backward()
+# In training loop
+q3r.update()
+total_loss = loss + q3r.val
+total_loss.backward()
 ```
 
-## Research Replication Procedures:
+## Setup and Installation
 
-### Dataset Preparation
+Ensure you have CUDA installed. This project was tested with CUDA 12.6.
 
-### Experiment Execution
+1. **Install PyTorch**:
+   ```bash
+   pip install torch==2.6.0+cu126 torchvision==0.21.0+cu126 --extra-index-url https://download.pytorch.org/whl/cu126
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Verify Installation**:
+   ```bash
+   python -c "import torch; print(torch.cuda.is_available())"
+   ```
+
+## Experiment Execution
+
+**Basic AdamQ3R Training:**
 ```bash
 python main.py --dataset CIFAR10 --model VIT_Tiny --learning_rate 0.0004 --epoch 100 --technique AdamQ3R --lmbda 0.1 --target_rank 0.05 --target_modules qkv
 ```
 
-Lorita Q3R script
+**LoRITa + Q3R:**
 ```bash
-python main.py --dataset CIFAR10 --model VIT_Tiny --learning_rate 0.00004 --epoch 100 --technique LoRITaQuaRS --depth_lorita=1 --weight_decay_alpha=0.1 --target_modules qkv --target_rank 16  --target_modules qkv --epsilon_schedule linear --N 46875
+python main.py --dataset CIFAR10 --model VIT_Tiny --learning_rate 0.00004 --epoch 100 --technique LoRITaQuaRS --depth_lorita=1 --weight_decay_alpha=0.1 --target_modules qkv --target_rank 16 --epsilon_schedule linear --N 46875
 ```
 
-## Q3R Implementation Details
+## Hyperparameters
 
-### Hyperparameter Q3R explanation
-| Hyperparameter      | Type              | Default / Example               | Description                                                              |
+| Parameter           | Type              | Default / Example               | Description                                                              |
 | ------------------- | ----------------- | ------------------------------- | ------------------------------------------------------------------------ |
 | `lr`                | float             | 0.00004                         | Base learning rate for the optimizer.                                    |
-| `trainable_modules` | list of nn.Module | `extract_linear(model, config)` | Linear modules that will receive Q3R updates.                            |
+| `trainable_modules` | dict              | `extract_linear(model, config)` | Linear modules that will receive Q3R updates.                            |
 | `target_rank`       | float (0–1)       | 0.2                             | Fraction of singular values to retain for low-rank projection.           |
-| `lmbda`             | float             | 0.1                             | Scaling factor for the Q3R regularization term relative to Adam updates. |
-| `period`             | int               | 5                              | The update period, increasing the period provides faster preformance by minimizing the amount of SVD updates calculated                   |
+| `lmbda`             | float             | 0.1                             | Scaling factor for the Q3R regularization term.                          |
+| `steps`             | int               | 5                               | Update period for SVD calculations (higher = faster, less frequent).     |
 
+## Advanced Usage
 
-### Fused modules
-- Gradient Stacking into modules
-- 
+### Fused Modules (QKV Layers)
 
-### GPU Parallelization and Q3R module independence
-- Faster increasing calculation of it
-- Memory overhead
+Q3R supports fused modules where multiple linear projections are concatenated into a single weight matrix. Provide slice indices to regularize each component independently:
 
-### Unittesting
-- 
-### Next Steps
-- Torch.optim integration with Accerlate
+```python
+# Fused QKV layer with output dimension 768 (256 for Q, 256 for K, 256 for V)
+qkv_slices = [(0, 256), (256, 512), (512, 768)]
+
+trainable_modules = {
+    model.attention.qkv: qkv_slices,
+    model.fc1: None  # None means use the full weight matrix
+}
+
+optimizer = AdamQ3R(
+    model.parameters(),
+    trainable_modules=trainable_modules,
+    target_rank=0.1,
+    lmbda=0.1
+)
+```
+
+The gradients for each slice are computed independently and "stuffed" back into the full gradient tensor using `pad_tensor_with_slice_bounds`, ensuring correct regularization without physically splitting weights.
+
+### Distributed Training
+
+Q3R automatically supports PyTorch DDP. Regularizers are distributed across ranks for efficient computation:
+
+```python
+# Standard DDP setup
+model = torch.nn.parallel.DistributedDataParallel(model, ...)
+
+# Q3R will automatically distribute work across GPUs
+optimizer = AdamQ3R(model.parameters(), trainable_modules=trainable_modules, ...)
+```
+
+## Citation
+
+If you use Q3R in your research, please cite:
+
+```bibtex
+@article{nguyen2025q3r,
+  title={Q3R: Quadratic Reweighted Rank Regularizer for Effective Low-Rank Training},
+  author={Nguyen, Ethan and Ghosh, Ipsita and K{\"u}mmerle, Christian},
+  journal={arXiv preprint arXiv:2511.04485},
+  year={2025}
+}
+```

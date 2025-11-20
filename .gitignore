@@ -1,0 +1,14 @@
+# Ignore wandb files
+wandb/
+saved_models/
+__pycache__/
+
+#vscode
+.vscode
+
+#python
+__pycache__
+
+#misc
+*.log
+.venv

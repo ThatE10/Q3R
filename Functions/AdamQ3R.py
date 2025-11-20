@@ -8,7 +8,7 @@ import torch
 from torch import nn
 from torch.optim import Optimizer
 
-from Functions.Q3R import QuaRS
+from Functions.Q3R import Q3R
 
 
 class AdamQ3R(Optimizer):
@@ -16,7 +16,11 @@ class AdamQ3R(Optimizer):
                  lr=0.001, betas=(0.9, 0.999), eps=1e-8, lmbda=0.1, schedule_fn=None, N=46875,
                  epsilon_schedule="DEFAULT", steps=5, verbose = False):
         """
-        Implementation of Adam with QUARS regularization
+        Implementation of Adam with QUARS regularization.
+        
+        This optimizer integrates the Q3R (Quadratic Reweighted Rank Regularizer) directly into the Adam update step.
+        It supports regularization of standard linear layers as well as fused layers (e.g., QKV projections) by
+        accepting a `trainable_modules` dictionary that can specify slices of weight matrices.
 
         Args:
             params: iterable of parameters to optimize
@@ -25,7 +29,7 @@ class AdamQ3R(Optimizer):
             lr: learning rate α (default: 0.001)
             betas: coefficients for moving averages (default: (0.9, 0.999))
             eps: term for numerical stability (default: 1e-8)
-            lmbda: QUARS regularization parameter (default: 0.1)
+            lmbda: Q3R regularization parameter (default: 0.1)
         """
         if not 0.0 <= lr:
             raise ValueError(f"Invalid learning rate: {lr}")
@@ -44,7 +48,7 @@ class AdamQ3R(Optimizer):
             lmbda=lmbda
         )
 
-        self.q3r = QuaRS(trainable_modules=trainable_modules, target_rank=target_rank, lmbda=lmbda,
+        self.q3r = Q3R(trainable_modules=trainable_modules, target_rank=target_rank, lmbda=lmbda,
                          verbose=verbose, N=N,
                          epsilon_schedule=epsilon_schedule, steps=steps)
 
@@ -54,7 +58,7 @@ class AdamQ3R(Optimizer):
     def step(self, closure=None):
         self.q3r(grad=True)
         """
-        Performs a single optimization step with QUARS regularization
+        Performs a single optimization step with Q3R regularization
 
         Args:
             closure (callable, optional): A closure that reevaluates the model and returns the loss
@@ -116,8 +120,6 @@ class AdamQ3R(Optimizer):
         """
         Loads the optimizer state from a dictionary
         """
-        print("Loading AdamQ3R state")
-        print("State keys:", state_dict.keys())
         self.state = state_dict['state']
         self.q3r.load_state_dict(state_dict['q3r_state'])
 

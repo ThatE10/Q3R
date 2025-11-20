@@ -3,11 +3,11 @@ import torch
 from matplotlib import pyplot as plt
 
 from Functions.EffectiveRank import effective_rank, tail_ratio
-from Functions.quars_v3 import QuaRS
+from Functions.Q3R import Q3R
 
 w = torch.rand((100, 100))
 
-reg = QuaRS(trainable_weights=[w], target_rank=10, lmbda=1)
+reg = Q3R(trainable_modules={nn.Linear(100,100): None}, target_rank=10, lmbda=1)
 
 
 def apply_grad(M, lr):

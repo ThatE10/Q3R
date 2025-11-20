@@ -1,7 +1,7 @@
 
 import torch
 
-from Functions.quars_v3 import Wx
+from Functions.Q3R import Wx
 
 # Set seed and dimensions
 torch.manual_seed(0)

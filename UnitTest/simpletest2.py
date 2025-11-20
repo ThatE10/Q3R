@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 
 from Functions.AdamQ3R import AdamQ3R
 from Functions.EffectiveRank import effective_rank, tail_ratio
-from Functions.quars_v3 import QuaRS
+from Functions.Q3R import Q3R as QuaRS
 
 w = torch.rand((100, 100), requires_grad=True)
 

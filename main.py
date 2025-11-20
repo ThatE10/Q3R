@@ -75,7 +75,8 @@ def print_memory(prefix="", rank=0):
             print(f"[{prefix}] Memory allocated: {allocated:.2f}MB | Reserved: {reserved:.2f}MB | "
                   f"Max Allocated: {max_allocated:.2f}MB | Max Reserved: {max_reserved:.2f}MB")
         except Exception as e:
-            print(f"[{prefix}] Could not get memory info: {e}")
+            print(f"Error printing memory: {e}")
+            print(f"[{prefix}] Failed to get memory usage: {e}")
 
 
 def validate_gpu_setup():
@@ -93,7 +94,6 @@ def validate_gpu_setup():
             props = torch.cuda.get_device_properties(i)
             print(f"GPU {i}: {props.name} ({props.total_memory // 1024 ** 2} MB)")
             test_tensor = torch.tensor([1.0]).to(device)
-            print(f"GPU {i}: Basic operation test passed")
         except Exception as e:
             print(f"GPU {i}: Test failed - {e}")
             return False

@@ -18,7 +18,7 @@ from matplotlib import pyplot as plt
 from Functions.AdamQ3R import AdamQ3R
 from Functions.EffectiveRank import effective_rank, tail_ratio
 from Functions.LoRITa import LoRITaLinear, LoRITaQKV
-from Functions.Q3R import QuaRS
+from Functions.Q3R import Q3R as QuaRS
 from main_helper import create_experiment_name, extract_modules, extract_linear, \
     extract_trainable_weights
 from Functions.timer import Timer

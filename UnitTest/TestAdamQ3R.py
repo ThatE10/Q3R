@@ -6,8 +6,8 @@ from matplotlib import pyplot as plt
 from torch import nn
 from torch.optim import Optimizer
 
-from Functions.AdamQ3R import AdamQ3R as AdamQ3REthan
-from Functions.quars_v3 import QuaRS
+from Functions.AdamQ3R import AdamQ3R
+from Functions.Q3R import Q3R as QuaRS
 
 
 def update_reweighting_operator(weight_matrix, target_rank, epsilon):
@@ -128,7 +128,7 @@ def compute_quars_gradient(weight_matrix, r_env, epsilon, device, lmbda):
     return 2 * lmbda * (term1 + term2 + term3 + term4)
 
 
-class AdamQ3RIpsita(Optimizer):
+class AdamQ3R_Reference(Optimizer):
     def __init__(self, params, lr=0.001, betas=(0.9, 0.999), eps=1e-8, lmbda=0.1, schedule_fn=None):
         """
         Implementation of Adam with QUARS regularization
@@ -293,18 +293,18 @@ class RegularisationConversionUnitTest(unittest.TestCase):
 
             for index, layer in enumerate(model_B.model):
                 B_s = torch.svd(layer.weight.data)[1]
-                plt.plot(np.arange(len(B_s)), B_s, label=f"Ethan Model B Layer:{index}")
+                plt.plot(np.arange(len(B_s)), B_s, label=f"AdamQ3R Model B Layer:{index}")
 
             for index, layer in enumerate(model_B.model):
                 C_s = torch.svd(layer.weight.data)[1]
-                plt.plot(np.arange(len(B_s)), C_s, label=f"Ipsita Model B Layer:{index}")
+                plt.plot(np.arange(len(B_s)), C_s, label=f"Reference Model B Layer:{index}")
 
             old_q3r = QuaRS(trainable_modules={layer:None for layer in model_A.model}, target_rank=target_rank,
                             lmbda=lmbda, steps=1,
                             rectangular_mode=False, verbose=False)
 
             optimizer_A = torch.optim.SGD(model_A.parameters(), lr=LR)
-            optimizer_B = AdamQ3REthan(model_B.parameters(),
+            optimizer_B = AdamQ3R(model_B.parameters(),
                                        lr=LR,
                                        trainable_modules={layer:None for layer in model_B.model},
                                        target_rank=target_rank,
@@ -313,7 +313,7 @@ class RegularisationConversionUnitTest(unittest.TestCase):
 
 
 
-            optimizer_C = AdamQ3RIpsita(model_C.parameters(),
+            optimizer_C = AdamQ3R_Reference(model_C.parameters(),
                                         lr=LR,
                                         lmbda=lmbda
                                         )
