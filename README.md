@@ -16,17 +16,40 @@
 </p>
 </div>
 
-##Quick Start Guide
+## Quick Start Guide
 There are two methodologies to employ Q3R during training via direct gradient application in AdamQ3R() or via autograd regularization.
 
 Example code snippet, hyperparameter recommendations and usage are below
-```
+```python
 model = Net()
 trainable_modules = extract_linear(model, config)
 optimizer = AdamQ3R(model.parameters(),lr=0.00004,
                     trainable_modules=trainable_modules, target_rank=0.2,
                     lmbda=0.1, period=5
                     )
+```
+
+```python
+
+trainable_modules = extract_linear(model, config)
+q3r = Q3R(trainable_modules=trainable_modules, target_rank=0.2,
+          lmbda=0.1, period=5
+          )
+
+for data in train_loader:
+    inputs, labels = data[0].to(DEVICE), data[1].to(DEVICE)     
+    optimizer.zero_grad()
+
+    outputs = model(inputs)
+    loss = criterion(outputs, labels)
+
+    if q3r:
+        q3r.update()
+        total_loss = loss + rank_regularizer.val
+    else:
+        total_loss = loss
+
+    total_loss.backward()
 ```
 
 ## Research Replication Procedures:
