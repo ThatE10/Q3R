@@ -98,11 +98,10 @@ class AdamQ3R(Optimizer):
                 mt_hat = mt / (1 - beta1 ** t)
                 vt_hat = vt / (1 - beta2 ** t)
 
-                eta_t = 3
 
                 denom = vt_hat.sqrt().add_(group['eps']) # \sqrt{\hat{\mathbf{v}}_t} + \epsilon
-                #p.data.addcdiv_(mt_hat, denom, value=-eta_t * lr)
-                p.data.addcdiv_(mt_hat, denom, value=-eta_t * lr)
+                #p.data.addcdiv_(mt_hat, denom, value=-lr)
+                p.data.addcdiv_(mt_hat, denom, value=-lr)
 
                 if p in self.q3r.grad.keys():
                     p.data.add_( eta_t * self.q3r.grad[p], alpha=-lr) #q3r includes regularisation lambda
