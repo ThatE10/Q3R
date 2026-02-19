@@ -8,12 +8,14 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --time=48:00:00
 #SBATCH --partition=Nebula_GPU
-#SBATCH --array=0-4%1 # launches 4 job indices from 0 to 3, max 1 concurrent jobs
+#SBATCH --array=0-1%1 # launches 4 job indices from 0 to 3, max 1 concurrent jobs
 
 
-module load cuda/12.1
+module load cuda/12.4
 module load anaconda3/2023.09
 conda activate quars_env3
+
+export CUBLAS_WORKSPACE_CONFIG=:4096:8
 
 commands=(
 #" python main.py --dataset CIFAR10 --model VIT_Tiny --learning_rate 0.00004 --epoch 100 --technique LoRA --target_rank 4 --target_modules qkv"
@@ -47,7 +49,8 @@ commands=(
 #"python main2.py --dataset CIFAR10 --model VIT_Base --learning_rate 0.00004 --epoch 100 --technique LoRITa --depth_lorita=1 --weight_decay_alpha=0.01 --target_modules qkv"
 #"python main2.py --dataset CIFAR10 --model VIT_Base --learning_rate 0.00004 --epoch 100 --technique LoRITa --depth_lorita=1 --weight_decay_alpha=0.1 --target_modules qkv"
 
-#"python main.py --dataset CIFAR10 --model VIT_Tiny --learning_rate 0.0004 --epoch 100 --technique AdamQ3R --lmbda 0.1 --target_rank 0.05 --target_modules qkv --epsilon_schedule DEFAULT --N 46875 --save_location /scratch/enguye17/saved_model"
+"python Debug_main.py --dataset CIFAR10 --model VIT_Tiny --learning_rate 0.0004 --epoch 20 --technique AdamQ3R --lmbda 0.1 --target_rank 0.05 --target_modules qkv --epsilon_schedule DEFAULT --N 46875 --save_location /scratch/enguye17/saved_model"
+
 #"python main.py --dataset CIFAR10 --model VIT_Tiny --learning_rate 0.0004 --epoch 100 --technique AdamQ3R --lmbda 0.1 --target_rank 0.1 --target_modules qkv --epsilon_schedule DEFAULT --N 46875"
 #"python main.py --dataset CIFAR10 --model VIT_Tiny --learning_rate 0.0004 --epoch 100 --technique AdamQ3R --lmbda 0.1 --target_rank 0.15 --target_modules qkv --epsilon_schedule DEFAULT --N 46875"
 
@@ -69,11 +72,12 @@ commands=(
 #"torchrun --nproc-per-node=4 main.py --dataset IMAGENET --model VIT_Base --batch_size 384 --learning_rate 0.0004 --epoch -1 --mixup_active True --technique AdamQ3R --lmbda 0.01 --grad_clip True --target_rank 0.19 --target_modules qkv --DATA_PARALLEL True --amp True --save_location /scratch/enguye17/saved_model"
 #"torchrun --nproc-per-node=4 main.py --dataset IMAGENET --model VIT_Base --batch_size 384 --learning_rate 0.0004 --epoch -1 --mixup_active True --grad_clip True --target_rank 0.19 --target_modules qkv --DATA_PARALLEL True --amp True --save_location /scratch/enguye17/saved_model"
 
-"torchrun --nproc-per-node=1 main.py --dataset IMAGENET --model VIT_Base --batch_size 384 --learning_rate 0.0004 --epoch -1 --mixup_active True --technique AdamQ3R --lmbda 0.01 --grad_clip True --target_rank 0.19 --target_modules qkv --DATA_PARALLEL True --amp True --save_location /scratch/enguye17/saved_model  --load_model_location /scratch/enguye17/saved_model/VIT_Base-2025-10-19_16_03_27-2895/model_epoch_105.pt"
+#"torchrun --nproc-per-node=1 main.py --dataset IMAGENET --model VIT_Base --batch_size 384 --learning_rate 0.0004 --epoch -1 --mixup_active True --technique AdamQ3R --lmbda 0.01 --grad_clip True --target_rank 0.19 --target_modules qkv --DATA_PARALLEL True --amp True --save_location /scratch/enguye17/saved_model  --load_model_location /scratch/enguye17/saved_model/VIT_Base-2025-10-19_16_03_27-2895/model_epoch_105.pt"
 
 )
 
 # Select the command to run based on the SLURM_ARRAY_TASK_ID
+
 
 command=${commands[$SLURM_ARRAY_TASK_ID]}
 

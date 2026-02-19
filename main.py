@@ -189,18 +189,18 @@ def main(args):
 
         print_memory("After training", config.local_rank)
 
-        TIMER.start("test_time")
+        """TIMER.start("test_time")
         with torch.no_grad():
             test_results = test_model(
                 criterion, model, validation_loader,
                 size, labels, config
             )
-        TIMER.lap("test_time")
+        TIMER.lap("test_time")"""
 
         print_memory("After validation", config.local_rank)
 
         if config.local_rank == 0 and logger_object:
-            train_results.update(test_results)
+            #train_results.update(test_results)
             logger_object.epoch_summary(train_results, model, config, verbose=False)
         
     if config.epoch <= 0:

@@ -4,12 +4,10 @@ from torch import tensor
 from typing import Union, List, Tuple, Dict
 import warnings
 
-import torch
 from torch import tensor, nn, Tensor
 from torch.types import Device
 import torch.distributed as dist
 
-import torch
 from contextlib import contextmanager
 
 @contextmanager
@@ -534,7 +532,9 @@ class Wx:
 
     def apply_R_x_innerproduct(self, X):
         """
-        Applies the reweighting operator R_{W,ε}
+        Evaluates the Q3R regularizer value 2* Q3R_{W',ε}(X) = < X, R_{W',ε}(X)) > for W' with left and right singular vector matrices U,V,
+        leading singular values sigma, and smoothing parameter ε = epsilon, given weight matrix = X.
+        See also Algorithm 3 of NeurIPS 2025 paper (https://arxiv.org/pdf/2511.04485).
         """
         device = X.device
         U = self.U.to(device)
@@ -544,102 +544,50 @@ class Wx:
         # Compute Σ_ε^(-1) - I
         # Convert scalar 1 to tensor for torch.maximum
         ones = torch.ones_like(sigma)
-
-        # Compute Σ_ε^(-1) - I
-        Sigma_epsilon_inv_diag = 1 / torch.maximum(sigma / self.epsilon, ones)
-        Sigma_epsilon_inv = torch.diag(Sigma_epsilon_inv_diag)
-        # (Sigma_epsilon^{-1} - I)
-        sigma_eps_inv_minus_I = Sigma_epsilon_inv - torch.eye(len(Sigma_epsilon_inv_diag), device=device)
-
-        # Rest of the function remains the same...
-        term1 = torch.trace(X.t() @ X)
-
-        UtW = U.t() @ X
-        VtWtU = V.t() @ X.t() @ U
-        temp = VtWtU @ sigma_eps_inv_minus_I
-        term2 = torch.trace(temp @ UtW @ V @ sigma_eps_inv_minus_I)
-
-        term3 = torch.trace(V.t() @ X.t() @ X @ V @ sigma_eps_inv_minus_I)
-        term4 = torch.trace(U.t() @ X @ X.t() @ U @ sigma_eps_inv_minus_I)
-
+        s = torch.reciprocal(torch.maximum(sigma / self.epsilon, ones))
+        s_shift = s - ones 
+        A = U.T @ X
+        B = X @ V
+        C = A @ V
+        term1 = torch.sum(X**2)
+        term2 = torch.sum(s_shift.unsqueeze(1)*C**2*s_shift)
+        term3 = torch.sum(B**2*s_shift)
+        term4 = torch.sum(s_shift.unsqueeze(1)*(A**2))
+        
         return term1 + term2 + term3 + term4
 
     def compute_quars_gradient(self, X):
         """
-        Memory-efficient computation of QUARS regularization gradient
+        Efficient computation of gradient $2 * nabla_{X} Q3R_{W',ε}(X) = 2 *R_{W',ε}(X)$ for weight matrix = X.
+        see also Algorithm 4 of NeurIPS 2025 paper (https://arxiv.org/pdf/2511.04485)
+        
         Handles both single component dict and list of component dicts
         """
 
-        """U = self.U
-        sigma = self.S
-        V = self.V
-        epsilon = self.epsilon
-
-        original_shape = X.shape
-
-        weight_matrix = X
-        device = X.device
-
-        ones = torch.ones_like(sigma)
-        Sigma_epsilon_inv_diag = 1 / torch.maximum(sigma / epsilon, ones)
-        Sigma_epsilon_inv = torch.diag(Sigma_epsilon_inv_diag)
-
-        UU_T = U @ U.T
-        VV_T = V @ V.T
-
-        I_d1 = torch.eye(weight_matrix.shape[0], device=device)
-        I_d2 = torch.eye(weight_matrix.shape[1], device=device)
-
-        term1 = U @ Sigma_epsilon_inv @ U.T @ weight_matrix @ V @ Sigma_epsilon_inv @ V.T
-        term2 = U @ Sigma_epsilon_inv @ U.T @ weight_matrix @ (I_d2 - VV_T)
-        term3 = (I_d1 - UU_T) @ weight_matrix @ V @ Sigma_epsilon_inv @ V.T
-        term4 = (I_d1 - UU_T) @ weight_matrix @ (I_d2 - VV_T)
-
-        grad = term1 + term2 + term3 + term4"""
         U, V = self.U, self.V
-        sigma_eps = self.S
+        sigma = self.S
         epsilon = self.epsilon
 
         # Create identity matrices
-        """I_U = torch.eye(U.size(0), device=self.device)
-        I_V = torch.eye(V.size(0), device=self.device)
+       
 
-        # Compute sigma_eps_inv
-        sigma_eps_inv = 1.0 / (sigma_eps + epsilon)
+        ones = torch.ones_like(sigma)
 
-        # Compute gradient terms
-        Z = X
-        term1 = U @ (sigma_eps_inv.unsqueeze(-1) * (U.T @ Z @ V)) @ (sigma_eps_inv.unsqueeze(-1) * V.T)
-        term2 = U @ (sigma_eps_inv.unsqueeze(-1) * (U.T @ Z @ (I_V - V @ V.T)))
-        term3 = (I_U - U @ U.T) @ Z @ V @ (sigma_eps_inv.unsqueeze(-1) * V.T)
-        term4 = (I_U - U @ U.T) @ Z @ (I_V - V @ V.T)"""
+        s = torch.reciprocal(torch.maximum(sigma / epsilon, ones))
+        s_shift = s - torch.ones_like(s) 
 
-        ones = torch.ones_like(sigma_eps)
+        
+        A = U.T @ X
+        B = X @ V
+        C = A @ V
 
-        Sigma_epsilon_inv_diag = 1 / torch.maximum(sigma_eps / epsilon, ones)
+        US = U * s_shift  # d1 × r
+        VS = V * s_shift  # d2 × r
 
-        Sigma_epsilon_inv = torch.diag(Sigma_epsilon_inv_diag)
-
-        UU_T = U @ U.T
-
-        VV_T = V @ V.T
-
-        I_d1 = torch.eye(X.shape[0], device=self.device)
-
-        I_d2 = torch.eye(X.shape[1], device=self.device)
-
-        term1 = U @ Sigma_epsilon_inv @ U.T @ X @ V @ Sigma_epsilon_inv @ V.T
-
-        term2 = U @ Sigma_epsilon_inv @ U.T @ X @ (I_d2 - VV_T)
-
-        term3 = (I_d1 - UU_T) @ X @ V @ Sigma_epsilon_inv @ V.T
-
-        term4 = (I_d1 - UU_T) @ X @ (I_d2 - VV_T)
-
-        # Sum all terms
-        grad = term1 + term2 + term3 + term4
-
-        # grad = grad.view(original_shape)
+        term2 = US @ (A + C @ VS.mT)#US @ U.T @ W @ (torch.eye(W.shape[1], device=device) - V @ V.T)
+        term3 = B @ VS.mT
+        
+        grad =  (X + term2 + term3)
 
         return 2 * grad
     def state_dict(self):

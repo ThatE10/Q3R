@@ -3,6 +3,11 @@ wandb/
 saved_models/
 __pycache__/
 
+#generated files
+data/
+outputs/
+saved_models/
+
 #vscode
 .vscode
 
@@ -12,3 +17,4 @@ __pycache__
 #misc
 *.log
 .venv
+*.ipynb_checkpoints

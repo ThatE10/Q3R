@@ -93,7 +93,7 @@ class TruncateLoRALinear(nn.Module):
         #sanity check if weight is equivalent to the original weight
         # weight - svd(weight) should be close to zero
         #print(torch.allclose(weight, (U * S.unsqueeze(-1)) @ Vt, atol=1e-6))
-        print("IM RUNNING YAHOOO!!!")
+
         print("Warning: Original weight is equivalent to the SVD decomposition. Consider using a different rank or original weight.")
         
         return U[:, :k] * S[:k].sqrt(), (S[:k].sqrt().unsqueeze(-1) * Vt[:k, :])
